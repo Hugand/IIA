@@ -3,6 +3,9 @@ globals [nNinhoAzul nNinhoAmarelo]
 breed[formigas formiga]
 breed[caracois caracol]
 
+turtles-own [energia]
+formigas-own [nErva]
+
 to Setup
   setup-patches
   setup-turtles
@@ -16,12 +19,9 @@ to setup-patches
   set nNinhoAzul 0
   set nNinhoAmarelo 0
 
-  ask patches
-  [
-      if random 101 < 5
-      [
-          set pcolor red
-      ]
+  ask patches [
+    if random 101 < 15
+      [ set pcolor green ]
   ]
 
   ask one-of patches with [pcolor = black] [
@@ -31,6 +31,9 @@ to setup-patches
   ask one-of patches with [pcolor = black] [
     set pcolor yellow
   ]
+
+  changeArmadilhas
+
 
 end
 
@@ -42,6 +45,8 @@ to setup-turtles
     set heading 90
     setxy random-xcor random-ycor
     set shape "bug"
+    set energia 100
+    set nErva 0
 
     while [pcolor = red] [
       setxy random-xcor random-ycor
@@ -55,11 +60,14 @@ to setup-turtles
     set heading 90
     setxy random-xcor random-ycor
     set shape "target"
+    set energia 100
 
     while [pcolor = red] [
       setxy random-xcor random-ycor
     ]
   ]
+
+  if mostra-energia? [ mostra-labels ]
 end
 
 to Go
@@ -67,7 +75,12 @@ to Go
   ifelse useMoveCaracois2
     [ MoveCaracois2 ]
     [ MoveCaracois ]
+  if mostra-energia? [ mostra-labels ]
+  icompeticao
   changeArmadilhas
+  morte-agentes
+  if reproducao? [ reproducao ]
+  mais-comida
   if count turtles = 0 [
     stop
   ]
@@ -77,66 +90,98 @@ end
 to MoveFormigas
   ask formigas [
     ifelse any? caracois-on neighbors
-      [ set color yellow ]
-      [ set color blue ]
+    [ set color yellow ]
+    [ set color blue ]
 
-    ; If patch ahead is a trap!
-    ifelse [pcolor] of patch-ahead 1 = red
-    [ right 90 ]
-    ; If patch ahead is a blue nest
-    [ ifelse [pcolor] of patch-ahead 1 = blue
+    ifelse any? caracois-on patch-ahead 1 and nErva >= 10 [
+      set color magenta
+      set energia sum [energia] of caracois-on patch-ahead 1
+      set nErva 0
+
+      ask caracois-on patch-ahead 1[ die ]
+    ][
+      ; Check for food
+      ifelse [pcolor] of patch-ahead 1 = green
       [ forward 1
-        set nNinhoAzul nNinhoAzul + 1
-        die ]
-      ; Else decide a move
-      [ ifelse random 101 < 90
-        [ forward 1 ]
-        [ ifelse random 11 < 5 [ left 90 ] [ right 90 ] ]
+        set energia round energia + 50
+        if nErva < capMax [ set nErva nErva + 1 ]
+        set pcolor black ]
+      [
+        set energia round energia - 1
+        ; If patch ahead is a trap!
+        ifelse [pcolor] of patch-ahead 1 = red
+        [ right 90 ]
+        ; If patch ahead is a blue nest
+        [ ifelse [pcolor] of patch-ahead 1 = blue
+          [ forward 1
+            set nNinhoAzul nNinhoAzul + nErva
+            set nErva 0 ]
+          ; Else decide a move
+          [ ifelse random 101 < 90
+            [ forward 1 ]
+            [ ifelse random 11 < 5 [ left 90 ] [ right 90 ] ]
+          ]
+        ]
       ]
     ]
+
+    if energia = 0 [ set color orange ]
   ]
 end
 
 to MoveCaracois
   ask caracois [
-    ; If patch here is a trap!
-    ifelse pcolor = red
-    [ die ]
-    ; If patch here is a yellow nest
-    [ ifelse pcolor = yellow
-      [ set nNinhoAmarelo nNinhoAmarelo + 1
-        die ]
-      [ forward 1 ]
+    ; Check for food
+    ifelse pcolor = green
+    [ set energia round energia + 1
+      set pcolor black ]
+    [
+      set energia round energia - 1
+      ; If patch here is a trap!
+      ifelse pcolor = red
+      [ die ]
+      ; If patch here is a yellow nest
+      [ ifelse pcolor = yellow
+        [ set nNinhoAmarelo nNinhoAmarelo + 1 ]
+        [ forward 1 ]
+      ]
     ]
   ]
 end
 
 to MoveCaracois2
   ask caracois [
-    ; If patch here is a trap!
-    ; ifelse [pcolor] of patch-left-and-ahead 45 1 = red or [pcolor] of patch-right-and-ahead 45 1 = red  or [pcolor] of patch-ahead 1 = red
-    ; Check for nest nearby
-    ifelse [pcolor] of patch-ahead 1 = yellow
-    [ forward 1 ]
-    [ ifelse [pcolor] of patch-left-and-ahead 90 1 = yellow
-      [ move-to patch-left-and-ahead 90 1
-        set nNinhoAmarelo nNinhoAmarelo + 1
-        die ]
-      [ ifelse [pcolor] of patch-right-and-ahead 90 1 = yellow
-        [ move-to patch-right-and-ahead 90 1
-          set nNinhoAmarelo nNinhoAmarelo + 1
-          die ]
-        ; Check for trap in front of agent
-        [ ifelse [pcolor] of patch-ahead 1 = red
-          [ right 90 ]
-          [ ifelse [pcolor] of patch-left-and-ahead 90 1 = red or [pcolor] of patch-right-and-ahead 90 1 = red
-            [ forward 1 ]
-            ; Else decide a move
-            [ ifelse random 101 < 90
-              [ forward 1 ]
-              [ ifelse random 11 < 5 [ left 90 ] [ right 90 ] ]
-            ]
-    ]]]]
+
+    ifelse [pcolor] of patch-ahead 1 = green
+    [ forward 1
+       set energia round energia + 50
+       set pcolor black ]
+    [
+      ifelse [pcolor] of patch-left-and-ahead 90 1 = green
+      [ left 90 ]
+      [ ifelse [pcolor] of patch-right-and-ahead 90 1 = green
+        [ right 90 ]
+        [
+          set energia round energia - 1
+          ; Check for nest nearby
+          ifelse [pcolor] of patch-ahead 1 = yellow
+          [ forward 1
+            set nNinhoAmarelo nNinhoAmarelo + 1 ]
+          [ ifelse [pcolor] of patch-left-and-ahead 90 1 = yellow
+            [ left 90 ]
+            [ ifelse [pcolor] of patch-right-and-ahead 90 1 = yellow
+              [ right 90 ]
+              ; Check for trap in front of agent
+              [ ifelse [pcolor] of patch-ahead 1 = red
+                [ right 90 ]
+                [ ifelse [pcolor] of patch-left-and-ahead 90 1 = red or [pcolor] of patch-right-and-ahead 90 1 = red
+                  [ forward 1 ]
+                  ; Else decide a move
+                  [ ifelse random 101 < 90
+                    [ forward 1 ]
+                    [ ifelse random 11 < 5 [ left 90 ] [ right 90 ] ]
+                  ]
+    ]]]]]]]
 
   ]
 end
@@ -149,16 +194,70 @@ to changeArmadilhas
   ask patches with [count turtles-here = 0 and pcolor = black]
   [
       if random 101 < 5
-      [set pcolor red
-      ]
+      [ set pcolor red ]
+  ]
+end
+
+to morte-agentes
+  ask turtles [
+    if energia <= 0 [ die ]
+  ]
+end
+
+to reproducao
+  ask formigas [
+    if energia > energia_reproducao [
+      if random 101 < reproducaoFormigas
+      [ set energia round energia / 2
+        set color white
+        hatch 1 [jump 5] ]
+    ]
+  ]
+
+  ask caracois [
+    if energia > energia_reproducao [
+      if random 101 < reproducaoCaracois
+      [ set energia round energia / 2
+        hatch 1 [move-to patch-left-and-ahead 90 1] ]
+    ]
+  ]
+end
+
+to mais-comida
+  if count patches with [pcolor = green] < 50 [
+    ask patches [
+      if random 101 < 2
+      [ set pcolor green ]
+    ]
+  ]
+end
+
+to mostra-labels
+  ask turtles [
+    set label ""
+    set label energia
+  ]
+end
+
+to competicao
+  ask formigas [
+    let f-energia energia
+
+    ask formigas-on neighbors
+    [ if energia < f-energia
+      [ set f-energia f-energia + energia
+        die ]
+    ]
+
+    set energia f-energia
   ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-400
-45
-903
-549
+355
+67
+858
+571
 -1
 -1
 15.0
@@ -224,32 +323,32 @@ nFormigas
 nFormigas
 0
 100
-60.0
+78.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-13
-118
-185
-151
+14
+109
+186
+142
 nCaracois
 nCaracois
 0
 100
-60.0
+51.0
 1
 1
 NIL
 HORIZONTAL
 
 MONITOR
-91
-165
-158
-210
+279
+238
+346
+283
 caracois
 count caracois
 17
@@ -257,10 +356,10 @@ count caracois
 11
 
 MONITOR
-13
-165
-82
-210
+195
+238
+264
+283
 formigas
 count formigas
 17
@@ -268,10 +367,10 @@ count formigas
 11
 
 MONITOR
-166
-165
-247
-210
+194
+290
+267
+335
 armadilhas
 count patches with [pcolor = red]
 17
@@ -279,10 +378,10 @@ count patches with [pcolor = red]
 11
 
 MONITOR
-14
-221
-186
-266
+15
+324
+187
+369
 N Formigas ninho azul
 nNinhoAzul
 17
@@ -290,10 +389,10 @@ nNinhoAzul
 11
 
 MONITOR
-13
-277
-186
-322
+14
+380
+187
+425
 N Caracois ninho amarelo
 nNinhoAmarelo
 17
@@ -301,10 +400,10 @@ nNinhoAmarelo
 11
 
 PLOT
-15
-336
-350
-550
+13
+431
+344
+644
 Agentes
 iteracoes
 nAgentes
@@ -320,13 +419,117 @@ PENS
 "formigas" 1.0 0 -13791810 true "" "plot count formigas"
 
 SWITCH
-198
+192
 67
-352
+346
 100
 useMoveCaracois2
 useMoveCaracois2
 0
+1
+-1000
+
+MONITOR
+281
+290
+345
+335
+Food
+count patches with [pcolor = green]
+17
+1
+11
+
+SLIDER
+14
+153
+186
+186
+capMax
+capMax
+0
+100
+51.0
+1
+1
+NIL
+HORIZONTAL
+
+SWITCH
+193
+109
+347
+142
+reproducao?
+reproducao?
+0
+1
+-1000
+
+SLIDER
+14
+194
+187
+227
+reproducaoFormigas
+reproducaoFormigas
+0
+100
+85.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+14
+236
+186
+269
+reproducaoCaracois
+reproducaoCaracois
+0
+100
+24.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+14
+279
+186
+312
+energia_reproducao
+energia_reproducao
+100
+500
+500.0
+1
+1
+NIL
+HORIZONTAL
+
+SWITCH
+192
+151
+347
+184
+mostra-energia?
+mostra-energia?
+0
+1
+-1000
+
+SWITCH
+195
+195
+346
+228
+competicao?
+competicao?
+1
 1
 -1000
 
