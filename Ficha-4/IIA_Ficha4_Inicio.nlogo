@@ -1,263 +1,216 @@
-globals [nNinhoAzul nNinhoAmarelo]
+turtles-own[memoria]
+globals [xstart ystart xend yend init_heading food perceptions]
 
-breed[formigas formiga]
-breed[caracois caracol]
-
-turtles-own [energia]
-formigas-own [nErva]
-
-to Setup
-  setup-patches
-  setup-turtles
-  reset-ticks
+to setup
+    clear-all
+    read-trail
+    setup-turtle
+    reset-ticks
 end
 
-to setup-patches
-  clear-all
-  set-patch-size 15
-
-  set nNinhoAzul 0
-  set nNinhoAmarelo 0
-
-  ask patches [
-    if random 101 < 15
-      [ set pcolor green ]
-  ]
-
-  ask one-of patches with [pcolor = black] [
-    set pcolor blue
-  ]
-
-  ask one-of patches with [pcolor = black] [
-    set pcolor yellow
-  ]
-
-  changeArmadilhas
-
-
-end
-
-to setup-turtles
-  create-formigas nFormigas
-
-  ask formigas [
-    set color blue
-    set heading 90
-    setxy random-xcor random-ycor
-    set shape "bug"
-    set energia 100
-    set nErva 0
-
-    while [pcolor = red] [
-      setxy random-xcor random-ycor
+to read-trail
+    ifelse (file-exists? trilho)
+    [
+        file-open trilho
+        set xstart file-read
+        set ystart file-read
+        set init_heading file-read
+        set xend file-read
+        set yend file-read
+        ask patch xstart ystart
+        [
+            set pcolor green
+        ]
+        ask patch xend yend
+        [
+            set pcolor red
+        ]
+        while [not file-at-end?]
+        [
+            let x file-read
+            let y file-read
+            if random-float 1.0 > buracos
+            [
+                ask patch x y
+                [
+                    set pcolor green
+                ]
+            ]
+        ]
+        ; user-message "File loading complete!"
+        file-close
     ]
-  ]
-
-  create-caracois nCaracois
-
-  ask caracois [
-    set color yellow
-    set heading 90
-    setxy random-xcor random-ycor
-    set shape "target"
-    set energia 100
-
-    while [pcolor = red] [
-      setxy random-xcor random-ycor
+    [
+        user-message "File not Found"
+        stop
     ]
-  ]
-
-  if mostra-energia? [ mostra-labels ]
 end
 
-to Go
-  MoveFormigas
-  ifelse useMoveCaracois2
-    [ MoveCaracois2 ]
-    [ MoveCaracois ]
-  if mostra-energia? [ mostra-labels ]
-  icompeticao
-  changeArmadilhas
-  morte-agentes
-  if reproducao? [ reproducao ]
-  mais-comida
-  if count turtles = 0 [
-    stop
-  ]
-  tick
+to setup-turtle
+    create-turtles 1
+    ask turtle 0
+    [
+        setxy xstart ystart
+        set shape "bug"
+        set color yellow
+        set heading init_heading
+    ]
 end
 
-to MoveFormigas
-  ask formigas [
-    ifelse any? caracois-on neighbors
-    [ set color yellow ]
-    [ set color blue ]
+to go
+    tick
+    if ticks >= 1000
+    [
+        stop
+    ]
+    if ([xcor] of turtle 0 = xend) and ([ycor] of turtle 0 = yend)
+    [
+        stop
+    ]
+    eat-trail
 
-    ifelse any? caracois-on patch-ahead 1 and nErva >= 10 [
-      set color magenta
-      set energia sum [energia] of caracois-on patch-ahead 1
-      set nErva 0
-
-      ask caracois-on patch-ahead 1[ die ]
+    ifelse tMovimento = "Básico" or tMovimento = "Probabilístico" [
+      move-turtle
     ][
-      ; Check for food
-      ifelse [pcolor] of patch-ahead 1 = green
-      [ forward 1
-        set energia round energia + 50
-        if nErva < capMax [ set nErva nErva + 1 ]
-        set pcolor black ]
-      [
-        set energia round energia - 1
-        ; If patch ahead is a trap!
-        ifelse [pcolor] of patch-ahead 1 = red
-        [ right 90 ]
-        ; If patch ahead is a blue nest
-        [ ifelse [pcolor] of patch-ahead 1 = blue
-          [ forward 1
-            set nNinhoAzul nNinhoAzul + nErva
-            set nErva 0 ]
-          ; Else decide a move
-          [ ifelse random 101 < 90
-            [ forward 1 ]
-            [ ifelse random 11 < 5 [ left 90 ] [ right 90 ] ]
+      ifelse tMovimento = "Maior alcance" [
+        move-turtle-maior-alcance
+      ][ move-turtle-memoria ]
+    ]
+end
+
+to eat-trail
+    ask turtle 0
+    [
+        if pcolor = green
+        [
+            set pcolor black
+            set food food + 1
+        ]
+    ]
+end
+
+to-report trilho-frente [distancia]
+    set perceptions perceptions + 1
+    ifelse ([pcolor] of patch-ahead distancia = green)
+    or ([pcolor] of patch-ahead distancia = red)
+    [
+        report 1
+    ]
+    [
+        report 0
+    ]
+end
+
+to move-turtle
+    ask turtle 0
+    [
+        ifelse (trilho-frente 1 = 1)
+        [
+            forward 1
+        ]
+        [
+            right 90
+            ifelse (trilho-frente 1 = 1)
+            [
+                forward 1
+            ]
+            [
+                right 180
+                ifelse (trilho-frente 1 = 1)
+                [
+                    forward 1
+                ]
+                [
+                    left 90
+
+                    move-turtle-prob
+               ]
+            ]
+        ]
+    ]
+end
+
+to move-turtle-memoria
+    ask turtle 0
+    [
+      ifelse memoria = 0 [
+        ifelse (trilho-frente 1 = 1)
+        [
+            forward 1
+        ]
+        [
+            right 90
+            ifelse (trilho-frente 1 = 1)
+            [
+                forward 1
+            ]
+            [
+                right 180
+                ifelse (trilho-frente 1 = 1)
+                [
+                    forward 1
+                ]
+                [
+                    left 90
+                    set memoria 1
+               ]
+            ]
+        ]
+      ][
+        ifelse random 101 < probabilidade [
+          forward 1
+          if trilho-frente 1 = 1 [ set memoria 0 ]
+        ][
+          ifelse random 101 < 50
+          [ right 90
+            if trilho-frente 1 = 1 [ set memoria 0 ]
+          ][
+            left 90
+            if trilho-frente 1 = 1 [ set memoria 0 ]
           ]
         ]
+
       ]
     ]
-
-    if energia = 0 [ set color orange ]
-  ]
 end
 
-to MoveCaracois
-  ask caracois [
-    ; Check for food
-    ifelse pcolor = green
-    [ set energia round energia + 1
-      set pcolor black ]
+to move-turtle-maior-alcance
+    ask turtle 0
     [
-      set energia round energia - 1
-      ; If patch here is a trap!
-      ifelse pcolor = red
-      [ die ]
-      ; If patch here is a yellow nest
-      [ ifelse pcolor = yellow
-        [ set nNinhoAmarelo nNinhoAmarelo + 1 ]
+        ifelse trilho-frente 1 = 1
         [ forward 1 ]
-      ]
+        [ ifelse trilho-frente 2 = 1
+          [ forward 2 ]
+          [ right 90
+            ifelse trilho-frente 1 = 1
+            [ forward 1 ]
+            [ ifelse trilho-frente 2 = 1
+              [ forward 2 ]
+              [ left 180
+                ifelse trilho-frente 1 = 1
+                [ forward 1 ]
+                [ ifelse trilho-frente 2 = 1
+                  [ forward 2 ]
+                  [ move-turtle-prob ]
+                ]
+              ]
+            ]
+          ]
+        ]
     ]
-  ]
 end
 
-to MoveCaracois2
-  ask caracois [
-
-    ifelse [pcolor] of patch-ahead 1 = green
-    [ forward 1
-       set energia round energia + 50
-       set pcolor black ]
-    [
-      ifelse [pcolor] of patch-left-and-ahead 90 1 = green
-      [ left 90 ]
-      [ ifelse [pcolor] of patch-right-and-ahead 90 1 = green
-        [ right 90 ]
-        [
-          set energia round energia - 1
-          ; Check for nest nearby
-          ifelse [pcolor] of patch-ahead 1 = yellow
-          [ forward 1
-            set nNinhoAmarelo nNinhoAmarelo + 1 ]
-          [ ifelse [pcolor] of patch-left-and-ahead 90 1 = yellow
-            [ left 90 ]
-            [ ifelse [pcolor] of patch-right-and-ahead 90 1 = yellow
-              [ right 90 ]
-              ; Check for trap in front of agent
-              [ ifelse [pcolor] of patch-ahead 1 = red
-                [ right 90 ]
-                [ ifelse [pcolor] of patch-left-and-ahead 90 1 = red or [pcolor] of patch-right-and-ahead 90 1 = red
-                  [ forward 1 ]
-                  ; Else decide a move
-                  [ ifelse random 101 < 90
-                    [ forward 1 ]
-                    [ ifelse random 11 < 5 [ left 90 ] [ right 90 ] ]
-                  ]
-    ]]]]]]]
-
-  ]
-end
-
-to changeArmadilhas
-  ask patches with [pcolor = red] [
-    set pcolor black
-  ]
-
-  ask patches with [count turtles-here = 0 and pcolor = black]
-  [
-      if random 101 < 5
-      [ set pcolor red ]
-  ]
-end
-
-to morte-agentes
-  ask turtles [
-    if energia <= 0 [ die ]
-  ]
-end
-
-to reproducao
-  ask formigas [
-    if energia > energia_reproducao [
-      if random 101 < reproducaoFormigas
-      [ set energia round energia / 2
-        set color white
-        hatch 1 [jump 5] ]
-    ]
-  ]
-
-  ask caracois [
-    if energia > energia_reproducao [
-      if random 101 < reproducaoCaracois
-      [ set energia round energia / 2
-        hatch 1 [move-to patch-left-and-ahead 90 1] ]
-    ]
-  ]
-end
-
-to mais-comida
-  if count patches with [pcolor = green] < 50 [
-    ask patches [
-      if random 101 < 2
-      [ set pcolor green ]
-    ]
-  ]
-end
-
-to mostra-labels
-  ask turtles [
-    set label ""
-    set label energia
-  ]
-end
-
-to competicao
-  ask formigas [
-    let f-energia energia
-
-    ask formigas-on neighbors
-    [ if energia < f-energia
-      [ set f-energia f-energia + energia
-        die ]
-    ]
-
-    set energia f-energia
-  ]
+to move-turtle-prob
+  ifelse random 101 < probabilidade
+  [ forward 1 ]
+  [ ifelse random 101 < 50 [right 90] [left 90] ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-355
-67
-858
-571
+210
+10
+683
+484
 -1
 -1
 15.0
@@ -270,21 +223,21 @@ GRAPHICS-WINDOW
 1
 1
 1
--16
-16
--16
-16
-1
-1
+-15
+15
+-15
+15
+0
+0
 1
 ticks
 30.0
 
 BUTTON
 16
-17
-91
-50
+42
+82
+75
 NIL
 Setup
 NIL
@@ -298,10 +251,10 @@ NIL
 1
 
 BUTTON
-122
-17
-185
-50
+104
+42
+173
+75
 NIL
 Go
 T
@@ -314,261 +267,125 @@ NIL
 NIL
 1
 
-SLIDER
-14
-67
-186
-100
-nFormigas
-nFormigas
-0
-100
-78.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-14
-109
-186
-142
-nCaracois
-nCaracois
-0
-100
-51.0
-1
-1
-NIL
-HORIZONTAL
-
 MONITOR
-279
-238
-346
-283
-caracois
-count caracois
-17
-1
 11
-
-MONITOR
-195
-238
-264
-283
-formigas
-count formigas
-17
-1
-11
-
-MONITOR
-194
-290
-267
-335
-armadilhas
-count patches with [pcolor = red]
-17
-1
-11
-
-MONITOR
-15
-324
+358
 187
-369
-N Formigas ninho azul
-nNinhoAzul
+403
+Comida Recolhida
+food
 17
 1
 11
 
 MONITOR
-14
-380
-187
-425
-N Caracois ninho amarelo
-nNinhoAmarelo
-17
-1
 11
-
-PLOT
-13
-431
-344
-644
-Agentes
-iteracoes
-nAgentes
-0.0
-10.0
-0.0
-10.0
-true
-true
-"" ""
-PENS
-"caracois" 1.0 0 -987046 true "" "plot count caracois"
-"formigas" 1.0 0 -13791810 true "" "plot count formigas"
-
-SWITCH
-192
-67
-346
-100
-useMoveCaracois2
-useMoveCaracois2
-0
-1
--1000
-
-MONITOR
-281
-290
-345
-335
-Food
-count patches with [pcolor = green]
+303
+98
+348
+Iterações
+ticks
 17
 1
 11
 
 SLIDER
-14
-153
-186
-186
-capMax
-capMax
+11
+258
+189
+291
+buracos
+buracos
 0
-100
-51.0
 1
+0.11
+0.01
 1
 NIL
 HORIZONTAL
 
-SWITCH
-193
-109
-347
-142
-reproducao?
-reproducao?
-0
-1
--1000
-
-SLIDER
-14
-194
-187
-227
-reproducaoFormigas
-reproducaoFormigas
-0
-100
-85.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-14
-236
-186
-269
-reproducaoCaracois
-reproducaoCaracois
-0
-100
-24.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-14
-279
-186
-312
-energia_reproducao
-energia_reproducao
-100
-500
-500.0
-1
-1
-NIL
-HORIZONTAL
-
-SWITCH
-192
+CHOOSER
+12
+106
+188
 151
-347
-184
-mostra-energia?
-mostra-energia?
+trilho
+trilho
+"trilho1.txt" "trilho2.txt"
 0
-1
--1000
 
-SWITCH
-195
-195
-346
-228
-competicao?
-competicao?
+MONITOR
+105
+303
+188
+348
+Percepções
+perceptions
+17
+1
+11
+
+CHOOSER
+12
+162
+189
+207
+tMovimento
+tMovimento
+"Básico" "Probabilístico" "Maior alcance" "Com memória"
+3
+
+SLIDER
+12
+217
+189
+250
+probabilidade
+probabilidade
+1
+50
+50.0
 1
 1
--1000
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+This section could give a general understanding of what the model is trying to show or explain.
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+This section could explain what rules the agents use to create the overall behavior of the model.
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+This section could explain how to use the model, including a description of each of the items in the interface tab.
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+This section could give some ideas of things for the user to notice while running the model.
 
 ## THINGS TO TRY
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+This section could give some ideas of things for the user to try to do (move sliders, switches, etc.) with the model.
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+This section could give some ideas of things to add or change in the procedures tab to make the model more complicated, detailed, accurate, etc.
 
 ## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+This section could point out any especially interesting or unusual features of NetLogo that the model makes use of, particularly in the Procedures tab.  It might also point out places where workarounds were needed because of missing features.
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+This section could give the names of models in the NetLogo Models Library or elsewhere which are of related interest.
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+This section could contain a reference to the model's URL on the web if it has one, as well as any other necessary credits or references.
 @#$#@#$#@
 default
 true
@@ -764,19 +581,12 @@ Polygon -7500403 true true 135 90 120 45 150 15 180 45 165 90
 
 sheep
 false
-15
-Circle -1 true true 203 65 88
-Circle -1 true true 70 65 162
-Circle -1 true true 150 105 120
-Polygon -7500403 true false 218 120 240 165 255 165 278 120
-Circle -7500403 true false 214 72 67
-Rectangle -1 true true 164 223 179 298
-Polygon -1 true true 45 285 30 285 30 240 15 195 45 210
-Circle -1 true true 3 83 150
-Rectangle -1 true true 65 221 80 296
-Polygon -1 true true 195 285 210 285 210 240 240 210 195 210
-Polygon -7500403 true false 276 85 285 105 302 99 294 83
-Polygon -7500403 true false 219 85 210 105 193 99 201 83
+0
+Rectangle -7500403 true true 151 225 180 285
+Rectangle -7500403 true true 47 225 75 285
+Rectangle -7500403 true true 15 75 210 225
+Circle -7500403 true true 135 75 150
+Circle -16777216 true false 165 76 116
 
 square
 false
@@ -862,13 +672,6 @@ Line -7500403 true 40 84 269 221
 Line -7500403 true 40 216 269 79
 Line -7500403 true 84 40 221 269
 
-wolf
-false
-0
-Polygon -16777216 true false 253 133 245 131 245 133
-Polygon -7500403 true true 2 194 13 197 30 191 38 193 38 205 20 226 20 257 27 265 38 266 40 260 31 253 31 230 60 206 68 198 75 209 66 228 65 243 82 261 84 268 100 267 103 261 77 239 79 231 100 207 98 196 119 201 143 202 160 195 166 210 172 213 173 238 167 251 160 248 154 265 169 264 178 247 186 240 198 260 200 271 217 271 219 262 207 258 195 230 192 198 210 184 227 164 242 144 259 145 284 151 277 141 293 140 299 134 297 127 273 119 270 105
-Polygon -7500403 true true -1 195 14 180 36 166 40 153 53 140 82 131 134 133 159 126 188 115 227 108 236 102 238 98 268 86 269 92 281 87 269 103 269 113
-
 x
 false
 0
@@ -879,6 +682,19 @@ NetLogo 6.1.1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
+<experiments>
+  <experiment name="experiment" repetitions="1" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <metric>count turtles</metric>
+    <enumeratedValueSet variable="buracos">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="trilho">
+      <value value="&quot;trilho2.txt&quot;"/>
+    </enumeratedValueSet>
+  </experiment>
+</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default
